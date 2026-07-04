@@ -142,6 +142,8 @@ interface FilterRowProps extends WithCurrentFilters {
     count: number,
     showSize: boolean,
     selectAllOnDbClk: boolean,
+    showCheckbox?: boolean,
+    toggleOnClick?: boolean,
 }
 
 function focusNextFilter(element: HTMLElement, next: boolean) {
@@ -194,11 +196,12 @@ const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
     const filterTorrents = serverData.torrents.filter(props.filter.filter);
     const serverSelected = useServerSelectedTorrents();
     let filterSize = props.showSize ? bytesToHumanReadableStr(filterTorrents.reduce((p, t) => p + (t.sizeWhenDone as number), 0)) : "";
+    const selected = props.currentFilters.find((f) => f.id === props.id) !== undefined;
     return <Flex align="center" gap="sm" px="xs" tabIndex={-1} style={{paddingLeft: `${(props.level || 0) * 1.0}rem`}}
-        className={props.currentFilters.find((f) => f.id === props.id) !== undefined ? "selected" : ""}
+        className={selected ? "selected" : ""}
         onClick={(event) => {
             props.setCurrentFilters({
-                verb: eventHasModKey(event) ? "toggle" : "set",
+                verb: props.toggleOnClick || eventHasModKey(event) ? "toggle" : "set",
                 filter: { id: props.id, filter: props.filter.filter },
             });
             props.setSearchTracker("");
@@ -217,6 +220,13 @@ const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
             props.setSearchTracker("");
         }}
         onKeyDown={filterOnKeyDown}>
+        {props.showCheckbox && <input
+            type="checkbox"
+            checked={selected}
+            readOnly
+            tabIndex={-1}
+            style={{ flexShrink: 0, pointerEvents: "none" }}
+        />}
         {props.filter.icon && <div className="icon-container"><props.filter.icon /></div>}
         <div style={{ flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis" }} title={props.filter.name}>{props.filter.name}</div>
         <div style={{ flexShrink: 0, fontSize: "small", opacity: 0.8 }}>{`(${props.count})`}</div>
@@ -225,7 +235,7 @@ const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
 });
 
 const LabelFilterRow = React.memo(function LabelFilterRow(props: Omit<FilterRowProps, "filter" | "id"> & { label: string }) {
-    return <FilterRow {...props} id={`label-${props.label}`} filter={{
+    return <FilterRow {...props} id={`label-${props.label}`} showCheckbox toggleOnClick filter={{
         name: props.label,
         filter: (t: Torrent) => t.labels.includes(props.label),
         icon: StatusIcons.Label,
@@ -733,6 +743,7 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
                     id="nolabels" filter={noLabelsFilter}
                     count={torrents.filter(noLabelsFilter.filter).length}
                     showSize={showFilterGroupSize} selectAllOnDbClk={selectFilterGroupOnDbClk}
+                    showCheckbox toggleOnClick
                     currentFilters={currentFilters} setCurrentFilters={setCurrentFilters} setSearchTracker={setSearchTracker} setCurrentTorrentId={setCurrentTorrentId} selectedReducer={selectedReducer} />
                 {Object.keys(labels).sort().map((label) =>
                     <LabelFilterRow key={`labels-${label}`} label={label}

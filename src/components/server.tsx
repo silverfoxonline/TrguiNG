@@ -53,6 +53,16 @@ function currentFiltersReducer(
     return newFilters;
 }
 
+function isLabelFilter(filter: TorrentFilter) {
+    return filter.id === "nolabels" || filter.id.startsWith("label-");
+}
+
+function applyCurrentFilters(torrent: Torrent, currentFilters: TorrentFilter[]) {
+    const labelFilters = currentFilters.filter(isLabelFilter);
+    return currentFilters.find((f) => !isLabelFilter(f) && !f.filter(torrent)) === undefined
+        && (labelFilters.length === 0 || labelFilters.find((f) => f.filter(torrent)) !== undefined);
+}
+
 function useSelected() {
     const hk = useHotkeysContext();
     const selectAll = useRef(() => { });
@@ -159,7 +169,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
         if ((torrents?.findIndex((t) => t.id === currentTorrent) ?? -1) === -1) setCurrentTorrentInt(undefined);
 
         const filtered = torrents?.filter((t) => {
-            return currentFilters.find((f) => !f.filter(t)) === undefined;
+            return applyCurrentFilters(t, currentFilters);
         }).filter(searchFilter) ?? [];
 
         const ids: string[] = filtered.map((t) => t.id);
@@ -235,7 +245,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
     const filteredTrackers = useMemo(() => {
         const trackers: Record<string, {count: number, speed: number}> = {};
         const filtered = torrents?.filter((t) => {
-            return currentFilters.find((f) => !f.filter(t)) === undefined;
+            return applyCurrentFilters(t, currentFilters);
         }) ?? [];
         filtered.forEach((t) => {
             if (!(t.cachedMainTracker in trackers)) trackers[t.cachedMainTracker] = {count: 0, speed: 0};
