@@ -1,6 +1,10 @@
 
 ## 基于 [openscopeproject/TrguiNG](https://github.com/openscopeproject/TrguiNG) 汉化并增加部分功能
 
+### 更新 (260705a)
+1. add: 种子列表右键菜单增加“导出种子文件...”，支持批量导出选中任务的 `.torrent` 文件，导出文件名使用种子列表中的名称。
+2. note: WebUI 版需要能通过 `torrents/<hash>.torrent` 只读访问 Transmission 的 `/config/torrents` 目录。
+
 ### 更新 (240607a)
 1. merge: openscopeproject/TrguiNG
 2. add: 暂停增加子状态（已完成/未完成）
@@ -43,3 +47,14 @@
    ```
    TRANSMISSION_WEB_HOME=/config/webui/trguing-zh
    ```
+
+### 导出种子文件配置（WebUI）
+右键导出 `.torrent` 文件时，WebUI 会按种子的 `hashString` 读取：
+```
+torrents/<hash>.torrent
+```
+如果使用 Docker，可以把 Transmission 的种子目录只读挂载到 WebUI 目录下：
+```
+/docker/transmission/config/torrents:/config/webui/trguing-zh/torrents:ro
+```
+也可以在宿主机创建软链接，确保 `/config/webui/trguing-zh/torrents` 能访问到真实的 `/config/torrents` 内容。
