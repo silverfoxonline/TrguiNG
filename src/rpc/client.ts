@@ -207,6 +207,24 @@ export class TransmissionClient {
         return torrent;
     }
 
+    async getTorrentExportInfo(ids: number[]): Promise<TorrentBase[]> {
+        const request = {
+            method: "torrent-get",
+            arguments: {
+                fields: ["id", "name", "hashString"],
+                ids,
+            },
+        };
+
+        const response = await this._sendRpc(request);
+
+        if (!isApiResponse(response)) {
+            throw new ApiError("torrent-get response is not torrents");
+        }
+
+        return response.arguments.torrents;
+    }
+
     async _getSession(fields: Readonly<string[]>): Promise<SessionInfo> {
         const request = {
             method: "session-get",

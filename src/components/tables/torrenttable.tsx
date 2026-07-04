@@ -45,7 +45,7 @@ import { notifications } from "@mantine/notifications";
 import type { ContextMenuInfo } from "components/contextmenu";
 import { ContextMenu, useContextMenu } from "components/contextmenu";
 import type { ModalCallbacks } from "components/modals/servermodals";
-import type { TorrentActionMethodsType } from "rpc/client";
+import { type TorrentActionMethodsType, useTransmissionClient } from "rpc/client";
 import * as Icon from "react-bootstrap-icons";
 import { useHotkeysContext } from "hotkeys";
 const { TAURI, invoke, copyToClipboard } = await import(/* webpackChunkName: "taurishim" */"taurishim");
@@ -408,6 +408,38 @@ function getRequiredFields(visibilityState: VisibilityState): TorrentFieldsType[
     return Array.from(set).sort();
 }
 
+function torrentFileUrls(hash: string) {
+    const hashes = Array.from(new Set([
+        hash,
+        hash.toLowerCase(),
+        hash.toUpperCase(),
+    ].filter((h) => h !== "")));
+
+    return hashes.map((h) => `torrents/${encodeURIComponent(h)}.torrent`);
+}
+
+async function fetchTorrentFile(hash: string): Promise<Blob | undefined> {
+    for (const url of torrentFileUrls(hash)) {
+        try {
+            const response = await fetch(url, { cache: "no-store" });
+            if (response.ok) return await response.blob();
+        } catch {
+            // Try the next common Transmission torrent-file name.
+        }
+    }
+    return undefined;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => { URL.revokeObjectURL(url); }, 30_000);
+}
 export function useInitialTorrentRequiredFields() {
     const config = useContext(ConfigContext);
 
@@ -495,6 +527,7 @@ function TorrentContextMenu(props: {
     const serverData = useServerTorrentData();
     const serverSelected = useServerSelectedTorrents();
     const rpcVersion = useServerRpcVersion();
+    const client = useTransmissionClient();
 
     const { onRowDoubleClick } = props;
     const onOpen = useCallback((reveal: boolean) => {
@@ -588,6 +621,55 @@ function TorrentContextMenu(props: {
             color: "green",
         });
     }, [serverData.torrents, serverSelected]);
+
+    const exportTorrentFiles = useCallback(() => {
+        if (serverSelected.size === 0) return;
+
+        void (async () => {
+            const torrents = await client.getTorrentExportInfo(Array.from(serverSelected));
+            const usedNames = new Map<string, number>();
+            let exportedCount = 0;
+            const failedNames: string[] = [];
+
+            for (const torrent of torrents) {
+                const baseName = fileSystemSafeName(torrent.name as string);
+                const count = usedNames.get(baseName) ?? 0;
+                usedNames.set(baseName, count + 1);
+                const fileName = `${count === 0 ? baseName : `${baseName} (${count + 1})`}.torrent`;
+                const hash = String(torrent.hashString ?? "");
+                const blob = await fetchTorrentFile(hash);
+
+                if (blob === undefined) {
+                    failedNames.push(baseName);
+                    continue;
+                }
+
+                downloadBlob(blob, fileName);
+                exportedCount += 1;
+            }
+
+            if (exportedCount > 0) {
+                notifications.show({
+                    message: `已导出 ${exportedCount} 个种子文件`,
+                    color: "green",
+                });
+            }
+
+            if (failedNames.length > 0) {
+                notifications.show({
+                    title: "部分种子导出失败",
+                    message: `无法读取 ${failedNames.length} 个 .torrent 文件，请确认 WebUI 目录下存在 torrents/<hash>.torrent`,
+                    color: "red",
+                });
+            }
+        })().catch((e) => {
+            notifications.show({
+                title: "导出种子失败",
+                message: String(e),
+                color: "red",
+            });
+        });
+    }, [client, serverSelected]);
 
     const hk = useHotkeysContext();
 
@@ -754,6 +836,13 @@ function TorrentContextMenu(props: {
                     icon={<Icon.MagnetFill size="1.1rem" />}
                     disabled={serverSelected.size === 0}>
                     复制选中种子的磁力链接
+                </Menu.Item>
+                <Menu.Item
+                    onClick={exportTorrentFiles}
+                    onMouseEnter={closeQueueSubmenu}
+                    icon={<Icon.Download size="1.1rem" />}
+                    disabled={serverSelected.size === 0}>
+                    导出种子文件...
                 </Menu.Item>
                 <Menu.Divider />
                 <Menu.Item ref={queueRef}
