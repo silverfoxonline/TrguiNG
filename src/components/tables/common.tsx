@@ -20,7 +20,7 @@ import { ActionIcon, Box, Group, Menu, TextInput } from "@mantine/core";
 import * as Icon from "react-bootstrap-icons";
 import type {
     Table, ColumnDef, ColumnSizingState,
-    SortingState, VisibilityState, Row, Column, RowSelectionState, Updater,
+    SortingState, VisibilityState, Row, Column, RowSelectionState,
     ColumnOrderState, AccessorKeyColumnDef, Header, HeaderGroup,
 } from "@tanstack/react-table";
 import {
@@ -50,6 +50,13 @@ function withSecondarySort(sorting: SortingState, secondarySortId?: string): Sor
     return secondarySortId === undefined ? sorting : [primary, { id: secondarySortId, desc: false }];
 }
 
+function getNextColumnSorting(sorting: SortingState, columnId: string, secondarySortId?: string): SortingState {
+    const primary = sorting[0];
+    if (primary?.id !== columnId) return withSecondarySort([{ id: columnId, desc: false }], secondarySortId);
+    if (primary.desc !== true) return withSecondarySort([{ id: columnId, desc: true }], secondarySortId);
+    return [];
+}
+
 function useTable<TData>(
     tablename: TableName,
     columns: Array<ColumnDef<TData, unknown> | AccessorKeyColumnDef<TData>>,
@@ -67,6 +74,7 @@ function useTable<TData>(
         (o: ColumnOrderState) => void,
         ColumnSizingState,
         SortingState,
+        React.Dispatch<SortingState>,
         Set<string>,
     ] {
     const config = useContext(ConfigContext);
@@ -100,12 +108,6 @@ function useTable<TData>(
         setRowSelection(Object.fromEntries(selected.map((id) => [id, true])));
     }, [selected]);
 
-    const onSortingChange = useCallback((updater: Updater<SortingState>) => {
-        setSorting((old) => withSecondarySort(
-            typeof updater === "function" ? updater(old) : updater,
-            secondarySortId));
-    }, [secondarySortId]);
-
     const table = useReactTable<TData>({
         columns,
         data,
@@ -120,7 +122,7 @@ function useTable<TData>(
         columnResizeMode: "onChange",
         onColumnSizingChange: setColumnSizing,
         enableSorting: true,
-        onSortingChange,
+        onSortingChange: setSorting,
         enableRowSelection: true,
         state: {
             columnVisibility,
@@ -165,7 +167,7 @@ function useTable<TData>(
         setRowsWithSelectedDescendants(newRowsWithSelectedDescendants);
     }, [table, rowSelection]);
 
-    return [table, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columnSizing, sorting, rowsWithSelectedDescendants];
+    return [table, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columnSizing, sorting, setSorting, rowsWithSelectedDescendants];
 }
 
 interface HIDEvent {
@@ -405,7 +407,7 @@ function TableRow<TData>(props: {
 const MemoizedTableRow = memo(TableRow) as typeof TableRow;
 
 function HeaderRow<TData>(
-    { headerGroup, height, resizerOffset, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columns }: {
+    { headerGroup, height, resizerOffset, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columns, sorting, setSorting, secondarySortId }: {
         headerGroup: HeaderGroup<TData>,
         height: number,
         resizerOffset: number | null,
@@ -414,6 +416,9 @@ function HeaderRow<TData>(
         columnOrder: ColumnOrderState,
         setColumnOrder: (s: ColumnOrderState) => void,
         columns: Array<Column<TData, unknown>>,
+        sorting: SortingState,
+        setSorting: React.Dispatch<SortingState>,
+        secondarySortId?: string,
     },
 ) {
     const [info, setInfo, handler] = useContextMenu();
@@ -482,22 +487,33 @@ function HeaderRow<TData>(
                 </DragDropContext>
             </ContextMenu >
             {headerGroup.headers.map(header => (
-                <HeaderCell key={header.id} header={header} resizerOffset={resizerOffset} />))}
+                <HeaderCell key={header.id} header={header} resizerOffset={resizerOffset} sorting={sorting} setSorting={setSorting} secondarySortId={secondarySortId} />))}
         </Box>
     );
 }
 
 const MemoizedHeaderRow = memo(HeaderRow) as typeof HeaderRow;
 
-function HeaderCell<TData>({ header, resizerOffset }: { header: Header<TData, unknown>, resizerOffset: number | null }) {
+function HeaderCell<TData>({ header, resizerOffset, sorting, setSorting, secondarySortId }: {
+    header: Header<TData, unknown>,
+    resizerOffset: number | null,
+    sorting: SortingState,
+    setSorting: React.Dispatch<SortingState>,
+    secondarySortId?: string,
+}) {
+    const primarySort = sorting[0]?.id === header.column.id ? sorting[0] : undefined;
+    const onSort = useCallback(() => {
+        setSorting(getNextColumnSorting(sorting, header.column.id, secondarySortId));
+    }, [header.column.id, secondarySortId, setSorting, sorting]);
+
     return (
         <div className="th" style={{
             width: header.getSize(),
         }}>
-            <div onClick={header.column.getToggleSortingHandler()} style={{ flexGrow: 1 }}>
+            <div onClick={onSort} style={{ flexGrow: 1 }}>
                 <span>
-                    {header.column.getIsSorted() !== false
-                        ? header.column.getIsSorted() === "desc"
+                    {primarySort !== undefined
+                        ? primarySort.desc === true
                             ? "▼ "
                             : "▲ "
                         : ""}
@@ -536,7 +552,7 @@ export function TrguiTable<TData>(props: {
     scrollToRow?: { id: string },
     secondarySortId?: string,
 }) {
-    const [table, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columnSizing, sorting, rowsWithSelectedDescendants] =
+    const [table, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columnSizing, sorting, setSorting, rowsWithSelectedDescendants] =
         useTable(props.tablename, props.columns, props.data, props.selected, props.getRowId, props.getSubRows, props.onVisibilityChange, props.secondarySortId);
 
     if (props.tableRef !== undefined) {
@@ -587,6 +603,8 @@ export function TrguiTable<TData>(props: {
                         columnOrder,
                         setColumnOrder,
                         sorting,
+                        setSorting,
+                        secondarySortId: props.secondarySortId,
                         columns: table.getAllLeafColumns(),
                     }} />
                 ))}
