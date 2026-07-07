@@ -20,7 +20,7 @@ import { ActionIcon, Box, Group, Menu, TextInput } from "@mantine/core";
 import * as Icon from "react-bootstrap-icons";
 import type {
     Table, ColumnDef, ColumnSizingState,
-    SortingState, VisibilityState, Row, Column, RowSelectionState,
+    SortingState, VisibilityState, Row, Column, RowSelectionState, Updater,
     ColumnOrderState, AccessorKeyColumnDef, Header, HeaderGroup,
 } from "@tanstack/react-table";
 import {
@@ -44,6 +44,12 @@ const defaultColumn = {
     maxSize: 2000,
 };
 
+function withSecondarySort(sorting: SortingState, secondarySortId?: string): SortingState {
+    const primary = sorting[0];
+    if (primary === undefined || primary.id === secondarySortId) return sorting;
+    return secondarySortId === undefined ? sorting : [primary, { id: secondarySortId, desc: false }];
+}
+
 function useTable<TData>(
     tablename: TableName,
     columns: Array<ColumnDef<TData, unknown> | AccessorKeyColumnDef<TData>>,
@@ -52,6 +58,7 @@ function useTable<TData>(
     getRowId: (r: TData) => string,
     getSubRows?: (r: TData) => TData[],
     onVisibilityChange?: React.Dispatch<VisibilityState>,
+    secondarySortId?: string,
 ): [
         Table<TData>,
         VisibilityState,
@@ -71,7 +78,7 @@ function useTable<TData>(
     const [columnSizing, setColumnSizing] =
         useState<ColumnSizingState>(config.getTableColumnSizes(tablename));
     const [sorting, setSorting] =
-        useState<SortingState>(config.getTableSortBy(tablename));
+        useState<SortingState>(() => withSecondarySort(config.getTableSortBy(tablename), secondarySortId));
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
     const [rowsWithSelectedDescendants, setRowsWithSelectedDescendants] =
         useState<Set<string>>(new Set());
@@ -93,6 +100,12 @@ function useTable<TData>(
         setRowSelection(Object.fromEntries(selected.map((id) => [id, true])));
     }, [selected]);
 
+    const onSortingChange = useCallback((updater: Updater<SortingState>) => {
+        setSorting((old) => withSecondarySort(
+            typeof updater === "function" ? updater(old) : updater,
+            secondarySortId));
+    }, [secondarySortId]);
+
     const table = useReactTable<TData>({
         columns,
         data,
@@ -107,7 +120,7 @@ function useTable<TData>(
         columnResizeMode: "onChange",
         onColumnSizingChange: setColumnSizing,
         enableSorting: true,
-        onSortingChange: setSorting,
+        onSortingChange,
         enableRowSelection: true,
         state: {
             columnVisibility,
@@ -521,9 +534,10 @@ export function TrguiTable<TData>(props: {
     onRowDoubleClick?: (row: TData) => void,
     onVisibilityChange?: React.Dispatch<VisibilityState>,
     scrollToRow?: { id: string },
+    secondarySortId?: string,
 }) {
     const [table, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columnSizing, sorting, rowsWithSelectedDescendants] =
-        useTable(props.tablename, props.columns, props.data, props.selected, props.getRowId, props.getSubRows, props.onVisibilityChange);
+        useTable(props.tablename, props.columns, props.data, props.selected, props.getRowId, props.getSubRows, props.onVisibilityChange, props.secondarySortId);
 
     if (props.tableRef !== undefined) {
         props.tableRef.current = {

@@ -114,7 +114,23 @@ const AllFields: readonly TableField[] = [
         requiredFields: ["percentDone", "rateDownload", "rateUpload"] as TorrentFieldsType[],
     },
     { name: "rateDownload", label: "下载速度", component: ByteRateField },
+    {
+        name: "downloadLimit",
+        label: "下载限速",
+        component: TorrentLimitField,
+        columnId: "downloadLimit",
+        accessorFn: (t) => t.downloadLimited === true ? t.downloadLimit : -1,
+        requiredFields: ["downloadLimit", "downloadLimited"] as TorrentFieldsType[],
+    },
     { name: "rateUpload", label: "上传速度", component: ByteRateField },
+    {
+        name: "uploadLimit",
+        label: "上传限速",
+        component: TorrentLimitField,
+        columnId: "uploadLimit",
+        accessorFn: (t) => t.uploadLimited === true ? t.uploadLimit : -1,
+        requiredFields: ["uploadLimit", "uploadLimited"] as TorrentFieldsType[],
+    },
     { name: "status", label: "状态", component: StatusField },
     { name: "addedDate", label: "添加时间", component: DateField },
     {
@@ -342,6 +358,20 @@ function ByteRateField(props: TableFieldProps) {
     return <div style={{ width: "100%", textAlign: "right" }}>{stringValue}</div>;
 }
 
+function TorrentLimitField(props: TableFieldProps) {
+    const limited = props.fieldName === "downloadLimit"
+        ? props.torrent.downloadLimited
+        : props.torrent.uploadLimited;
+    const limit = props.torrent[props.fieldName] as number;
+    const stringValue = useMemo(() => {
+        if (limited !== true) return "";
+        if (limit < 0) return "∞";
+        return `${bytesToHumanReadableStr(limit * 1024)}/s`;
+    }, [limit, limited]);
+
+    return <div style={{ width: "100%", textAlign: "right" }}>{stringValue}</div>;
+}
+
 function PercentBarField(props: TableFieldProps) {
     const config = useContext(ConfigContext);
     const now = props.torrent[props.fieldName] * 100;
@@ -512,6 +542,7 @@ export function TorrentTable(props: {
                 onVisibilityChange,
                 onRowDoubleClick,
                 scrollToRow: props.scrollToRow,
+                secondarySortId: "name",
             }} />
         </Box>
     );
