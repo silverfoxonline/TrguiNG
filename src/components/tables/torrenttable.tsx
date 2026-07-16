@@ -303,7 +303,7 @@ function PriorityField(props: TableFieldProps) {
     return <Badge radius="md" variant="filled" bg={PriorityColors.get(priority)}>{PriorityStrings.get(priority)}</Badge>;
 }
 
-const labelCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const labelCollator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 export function LabelsField(props: TableFieldProps) {
     const labels: string[] | undefined = props.torrent.labels;
