@@ -1,6 +1,11 @@
 
 ## 基于 [openscopeproject/TrguiNG](https://github.com/openscopeproject/TrguiNG) 汉化并增加部分功能
 
+### 更新 (260716a)
+1. add: 种子列表增加下载限速和上传限速列，未启用限速时显示为空。
+2. impr: 种子列表使用其他列排序时，以名称升序作为第二排序条件，使结果顺序保持稳定。
+3. build: 修复 fork 的 GitHub Actions WebUI 构建产物上传，并自动下载当月或上月的 DB-IP 数据库。
+
 ### 更新 (260705a)
 1. add: 种子列表右键菜单增加“导出种子文件...”，支持批量导出选中任务的 `.torrent` 文件，导出文件名使用种子列表中的名称。
 2. note: WebUI 版需要能通过 `torrents/<hash>.torrent` 只读访问 Transmission 的 `/config/torrents` 目录。
@@ -41,7 +46,7 @@
 ## PS. 主要是自用，有想加功能的可以提 issues，不保证实现
 
 ## 安装介绍（docker 环境）
-1. 从 [releases](https://github.com/jayzcoder/TrguiNG/releases) 下载 `trguing-web-xxxx-zh.zip`
+1. 从本 fork 的 [Releases](https://github.com/silverfoxonline/TrguiNG/releases) 下载 `trguing-web-*.zip`。开发版也可在 GitHub Actions 的 `build` 工作流产物中下载。
 2. 解压到 transmission 设置的 webui 目录即可
 3. transmission 需要正确映射并设置环境变量(确保 index.html 位于 TRANSMISSION_WEB_HOME 所在的目录第一层):
    ```
