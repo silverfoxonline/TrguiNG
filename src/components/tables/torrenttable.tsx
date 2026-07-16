@@ -542,7 +542,6 @@ export function TorrentTable(props: {
                 onVisibilityChange,
                 onRowDoubleClick,
                 scrollToRow: props.scrollToRow,
-                secondarySortId: "name",
             }} />
         </Box>
     );

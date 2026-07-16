@@ -44,17 +44,16 @@ const defaultColumn = {
     maxSize: 2000,
 };
 
-function withSecondarySort(sorting: SortingState, secondarySortId?: string): SortingState {
-    const primary = sorting[0];
-    if (primary === undefined || primary.id === secondarySortId) return sorting;
-    return secondarySortId === undefined ? sorting : [primary, { id: secondarySortId, desc: false }];
-}
+function setColumnSorting(sorting: SortingState, columnId: string, desc?: boolean): SortingState {
+    const index = sorting.findIndex((sort) => sort.id === columnId);
+    if (desc === undefined) return sorting.filter((sort) => sort.id !== columnId);
 
-function getNextColumnSorting(sorting: SortingState, columnId: string, secondarySortId?: string): SortingState {
-    const primary = sorting[0];
-    if (primary?.id !== columnId) return withSecondarySort([{ id: columnId, desc: false }], secondarySortId);
-    if (primary.desc !== true) return withSecondarySort([{ id: columnId, desc: true }], secondarySortId);
-    return [];
+    const nextSort = { id: columnId, desc };
+    if (index < 0) return [...sorting, nextSort];
+
+    const nextSorting = [...sorting];
+    nextSorting[index] = nextSort;
+    return nextSorting;
 }
 
 function useTable<TData>(
@@ -65,7 +64,6 @@ function useTable<TData>(
     getRowId: (r: TData) => string,
     getSubRows?: (r: TData) => TData[],
     onVisibilityChange?: React.Dispatch<VisibilityState>,
-    secondarySortId?: string,
 ): [
         Table<TData>,
         VisibilityState,
@@ -86,7 +84,7 @@ function useTable<TData>(
     const [columnSizing, setColumnSizing] =
         useState<ColumnSizingState>(config.getTableColumnSizes(tablename));
     const [sorting, setSorting] =
-        useState<SortingState>(() => withSecondarySort(config.getTableSortBy(tablename), secondarySortId));
+        useState<SortingState>(config.getTableSortBy(tablename));
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
     const [rowsWithSelectedDescendants, setRowsWithSelectedDescendants] =
         useState<Set<string>>(new Set());
@@ -407,7 +405,7 @@ function TableRow<TData>(props: {
 const MemoizedTableRow = memo(TableRow) as typeof TableRow;
 
 function HeaderRow<TData>(
-    { headerGroup, height, resizerOffset, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columns, sorting, setSorting, secondarySortId }: {
+    { headerGroup, height, resizerOffset, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columns, sorting, setSorting }: {
         headerGroup: HeaderGroup<TData>,
         height: number,
         resizerOffset: number | null,
@@ -418,7 +416,6 @@ function HeaderRow<TData>(
         columns: Array<Column<TData, unknown>>,
         sorting: SortingState,
         setSorting: React.Dispatch<SortingState>,
-        secondarySortId?: string,
     },
 ) {
     const [info, setInfo, handler] = useContextMenu();
@@ -487,37 +484,66 @@ function HeaderRow<TData>(
                 </DragDropContext>
             </ContextMenu >
             {headerGroup.headers.map(header => (
-                <HeaderCell key={header.id} header={header} resizerOffset={resizerOffset} sorting={sorting} setSorting={setSorting} secondarySortId={secondarySortId} />))}
+                <HeaderCell key={header.id} header={header} resizerOffset={resizerOffset} sorting={sorting} setSorting={setSorting} />))}
         </Box>
     );
 }
 
 const MemoizedHeaderRow = memo(HeaderRow) as typeof HeaderRow;
 
-function HeaderCell<TData>({ header, resizerOffset, sorting, setSorting, secondarySortId }: {
+function HeaderCell<TData>({ header, resizerOffset, sorting, setSorting }: {
     header: Header<TData, unknown>,
     resizerOffset: number | null,
     sorting: SortingState,
     setSorting: React.Dispatch<SortingState>,
-    secondarySortId?: string,
 }) {
-    const primarySort = sorting[0]?.id === header.column.id ? sorting[0] : undefined;
-    const onSort = useCallback(() => {
-        setSorting(getNextColumnSorting(sorting, header.column.id, secondarySortId));
-    }, [header.column.id, secondarySortId, setSorting, sorting]);
+    const sortIndex = sorting.findIndex((sort) => sort.id === header.column.id);
+    const columnSort = sortIndex < 0 ? undefined : sorting[sortIndex];
+    const onSort = useCallback((desc?: boolean) => {
+        setSorting(setColumnSorting(sorting, header.column.id, desc));
+    }, [header.column.id, setSorting, sorting]);
 
     return (
         <div className="th" style={{
             width: header.getSize(),
         }}>
-            <div onClick={onSort} style={{ flexGrow: 1 }}>
-                <span>
-                    {primarySort !== undefined
-                        ? primarySort.desc === true
-                            ? "▼ "
-                            : "▲ "
-                        : ""}
-                </span>
+            <div style={{ alignItems: "center", display: "flex", flexGrow: 1, minWidth: 0 }}>
+                {header.column.getCanSort() &&
+                    <Menu position="bottom-start" withinPortal>
+                        <Menu.Target>
+                            <ActionIcon
+                                color={columnSort === undefined ? "gray" : "blue"}
+                                mr={3}
+                                size="xs"
+                                title={columnSort === undefined ? "设置排序" : `第 ${sortIndex + 1} 级排序`}
+                                variant={columnSort === undefined ? "subtle" : "light"}
+                            >
+                                <Icon.FunnelFill size="0.65rem" />
+                                {columnSort !== undefined &&
+                                    <span style={{ fontSize: "0.6rem", marginLeft: 1 }}>{sortIndex + 1}</span>}
+                            </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                            <Menu.Item
+                                icon={columnSort?.desc === false ? <Icon.Check size="1rem" /> : <Icon.SortUp size="1rem" />}
+                                onClick={() => onSort(false)}
+                            >
+                                升序
+                            </Menu.Item>
+                            <Menu.Item
+                                icon={columnSort?.desc === true ? <Icon.Check size="1rem" /> : <Icon.SortDown size="1rem" />}
+                                onClick={() => onSort(true)}
+                            >
+                                降序
+                            </Menu.Item>
+                            <Menu.Item
+                                icon={columnSort === undefined ? <Icon.Check size="1rem" /> : <Icon.X size="1rem" />}
+                                onClick={() => onSort()}
+                            >
+                                默认
+                            </Menu.Item>
+                        </Menu.Dropdown>
+                    </Menu>}
                 {flexRender(
                     header.column.columnDef.header,
                     header.getContext())}
@@ -550,10 +576,9 @@ export function TrguiTable<TData>(props: {
     onRowDoubleClick?: (row: TData) => void,
     onVisibilityChange?: React.Dispatch<VisibilityState>,
     scrollToRow?: { id: string },
-    secondarySortId?: string,
 }) {
     const [table, columnVisibility, setColumnVisibility, columnOrder, setColumnOrder, columnSizing, sorting, setSorting, rowsWithSelectedDescendants] =
-        useTable(props.tablename, props.columns, props.data, props.selected, props.getRowId, props.getSubRows, props.onVisibilityChange, props.secondarySortId);
+        useTable(props.tablename, props.columns, props.data, props.selected, props.getRowId, props.getSubRows, props.onVisibilityChange);
 
     if (props.tableRef !== undefined) {
         props.tableRef.current = {
@@ -604,7 +629,6 @@ export function TrguiTable<TData>(props: {
                         setColumnOrder,
                         sorting,
                         setSorting,
-                        secondarySortId: props.secondarySortId,
                         columns: table.getAllLeafColumns(),
                     }} />
                 ))}
