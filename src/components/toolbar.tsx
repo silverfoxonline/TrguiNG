@@ -72,6 +72,7 @@ interface ToolbarProps {
     toggleDetailsPanel: () => void,
     toggleMainSplit: () => void,
     toggleShowRunStatus: () => void,
+    resetSorting: () => void,
 }
 
 function useButtonHandlers(
@@ -407,6 +408,12 @@ function Toolbar(props: ToolbarProps) {
                 depressed={altSpeedMode}
             >
                 <Icon.Speedometer2 size="1.5rem" />
+            </ToolbarButton>
+            <ToolbarButton
+                title="取消所有排序并恢复默认"
+                onClick={props.resetSorting}
+            >
+                <Icon.ArrowCounterclockwise size="1.5rem" />
             </ToolbarButton>
 
             <TextInput mx="sm" ref={searchRef}

@@ -35,7 +35,7 @@ import {
 import type { ProgressBarVariant } from "../progressbar";
 import { ProgressBar } from "../progressbar";
 import type { AccessorFn, CellContext } from "@tanstack/table-core";
-import type { TableSelectReducer } from "./common";
+import type { TableSelectReducer, TrguiTableRef } from "./common";
 import { EditableNameField, TrguiTable } from "./common";
 import { Badge, Box, Button, Kbd, Menu, Portal, Text, useMantineTheme } from "@mantine/core";
 import { ConfigContext, ServerConfigContext } from "config";
@@ -303,10 +303,13 @@ function PriorityField(props: TableFieldProps) {
     return <Badge radius="md" variant="filled" bg={PriorityColors.get(priority)}>{PriorityStrings.get(priority)}</Badge>;
 }
 
+const labelCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 export function LabelsField(props: TableFieldProps) {
     const labels: string[] | undefined = props.torrent.labels;
+    const sortedLabels = labels?.slice().sort(labelCollator.compare);
     return <>
-        {labels?.map((label) => <Badge key={label}
+        {sortedLabels?.map((label) => <Badge key={label}
             radius="md" variant="filled" className="torrent-label white-outline">
             {label}
         </Badge>)}
@@ -486,6 +489,7 @@ export function TorrentTable(props: {
     onColumnVisibilityChange: React.Dispatch<TorrentFieldsType[]>,
     scrollToRow?: { id: string },
     setStatus: (status: RunStatus) => void,
+    tableRef?: React.MutableRefObject<TrguiTableRef | undefined>,
 }) {
     const serverConfig = useContext(ServerConfigContext);
 
@@ -542,6 +546,7 @@ export function TorrentTable(props: {
                 onVisibilityChange,
                 onRowDoubleClick,
                 scrollToRow: props.scrollToRow,
+                tableRef: props.tableRef,
             }} />
         </Box>
     );

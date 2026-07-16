@@ -561,6 +561,7 @@ function HeaderCell<TData>({ header, resizerOffset, sorting, setSorting }: {
 
 export interface TrguiTableRef {
     setExpanded: (state: boolean) => void,
+    resetSorting: () => void,
 }
 
 export function TrguiTable<TData>(props: {
@@ -583,6 +584,7 @@ export function TrguiTable<TData>(props: {
     if (props.tableRef !== undefined) {
         props.tableRef.current = {
             setExpanded: table.toggleAllRowsExpanded,
+            resetSorting: () => { setSorting([]); },
         };
     }
 

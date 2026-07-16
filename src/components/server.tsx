@@ -28,6 +28,7 @@ import type { TorrentFilter } from "./filters";
 import { DefaultFilter, Filters } from "./filters";
 import { Statusbar } from "./statusbar";
 import { TorrentTable, useInitialTorrentRequiredFields } from "./tables/torrenttable";
+import type { TrguiTableRef } from "./tables/common";
 import { MemoizedToolbar } from "./toolbar";
 import { useSession, useTorrentList } from "queries";
 import type { TorrentFieldsType } from "rpc/transmission";
@@ -191,6 +192,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
     }, [currentFilters, currentTorrent]);
 
     const modals = useRef<ModalCallbacks>(null);
+    const torrentTableRef = useRef<TrguiTableRef>();
 
     const rpcVersion = session?.["rpc-version"] ?? 0;
 
@@ -286,6 +288,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
                     toggleDetailsPanel={toggleDetailsPanel}
                     toggleMainSplit={toggleMainSplit}
                     toggleShowRunStatus={toggleShowRunStatus}
+                    resetSorting={() => { torrentTableRef.current?.resetSorting(); }}
                 />
             </Box>
             <SplitLayout key={`split-${showFiltersPanel ? "1" : "0"}-0-${mainSplit}-${showRunStatus}`}
@@ -326,6 +329,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
                                  selectedReducer={selectedReducer}
                                  onColumnVisibilityChange={setTableRequiredFields}
                                  scrollToRow={scrollToRow}
+                                 tableRef={torrentTableRef}
                                  setStatus={updateStatus} />}
                          bottom={showDetailsPanel
                              ? <MemoizedDetails torrentId={currentTorrent} updates={updates} />
@@ -337,6 +341,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
                             selectedReducer={selectedReducer}
                             onColumnVisibilityChange={setTableRequiredFields}
                             scrollToRow={scrollToRow}
+                            tableRef={torrentTableRef}
                             setStatus={updateStatus} />}
                 bottom={!showFiltersPanel && showDetailsPanel
                     ? <MemoizedDetails torrentId={currentTorrent} updates={updates} />
