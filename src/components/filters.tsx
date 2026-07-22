@@ -293,7 +293,8 @@ const ErrorFilterRow = React.memo(function ErrorFilterRow(props: Omit<FilterRowP
     }} />;
 });
 
-interface DirFilterRowProps extends FiltersProps {
+interface DirFilterRowProps extends WithCurrentFilters {
+    torrents: Torrent[],
     id: string,
     dir: Directory,
     expandedReducer: ({ verb, value }: { verb: "add" | "remove", value: string }) => void,
