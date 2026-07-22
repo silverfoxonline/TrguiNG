@@ -23,7 +23,7 @@ import * as Icon from "react-bootstrap-icons";
 import * as StatusIcons from "./statusicons";
 import type { FilterSectionName, SectionsVisibility, StatusFilterName } from "../config";
 import { ConfigContext, ServerConfigContext } from "../config";
-import { Box, Button, Divider, Flex, Menu, Portal } from "@mantine/core";
+import { Box, Button, Divider, Flex, Menu, Portal, SegmentedControl } from "@mantine/core";
 import {bytesToHumanReadableStr, ensurePathDelimiter, eventHasModKey, useForceRender} from "trutil";
 import { useContextMenu } from "./contextmenu";
 import { MemoSectionsContextMenu, getSectionsMap } from "./sectionscontextmenu";
@@ -36,6 +36,17 @@ export interface TorrentFilter {
     id: string,
     filter: (t: Torrent) => boolean,
 }
+
+export type LabelFilterMode = "any" | "all";
+
+export type CurrentFiltersAction = {
+    verb: "set" | "toggle",
+    filter: TorrentFilter,
+} | {
+    verb: "replace",
+    removeIds: string[],
+    filter?: TorrentFilter,
+};
 
 interface NamedFilter {
     name: string,
@@ -122,10 +133,7 @@ export const DefaultFilter = statusFilters[0].filter;
 
 interface WithCurrentFilters {
     currentFilters: TorrentFilter[],
-    setCurrentFilters: React.Dispatch<{
-        verb: "set" | "toggle",
-        filter: TorrentFilter,
-    }>,
+    setCurrentFilters: React.Dispatch<CurrentFiltersAction>,
     setSearchTracker: (tracker: string) => void,
     setCurrentTorrentId: (id: number) => void,
     selectedReducer: TableSelectReducer,
@@ -133,6 +141,8 @@ interface WithCurrentFilters {
 
 interface FiltersProps extends WithCurrentFilters {
     torrents: Torrent[],
+    labelFilterMode: LabelFilterMode,
+    setLabelFilterMode: React.Dispatch<React.SetStateAction<LabelFilterMode>>,
 }
 
 interface FilterRowProps extends WithCurrentFilters {
@@ -143,6 +153,7 @@ interface FilterRowProps extends WithCurrentFilters {
     showSize: boolean,
     selectAllOnDbClk: boolean,
     showCheckbox?: boolean,
+    triStateCheckbox?: boolean,
 }
 
 function focusNextFilter(element: HTMLElement, next: boolean) {
@@ -196,6 +207,9 @@ const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
     const serverSelected = useServerSelectedTorrents();
     let filterSize = props.showSize ? bytesToHumanReadableStr(filterTorrents.reduce((p, t) => p + (t.sizeWhenDone as number), 0)) : "";
     const selected = props.currentFilters.find((f) => f.id === props.id) !== undefined;
+    const excludedId = `exclude-${props.id}`;
+    const excluded = props.triStateCheckbox === true
+        && props.currentFilters.find((f) => f.id === excludedId) !== undefined;
     return <Flex align="center" gap="sm" px="xs" tabIndex={-1} style={{paddingLeft: `${(props.level || 0) * 1.0}rem`}}
         className={selected ? "selected" : ""}
         onClick={(event) => {
@@ -222,15 +236,29 @@ const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
         {props.showCheckbox && <input
             type="checkbox"
             checked={selected}
+            ref={(element) => {
+                if (element !== null) element.indeterminate = excluded;
+            }}
+            aria-checked={excluded ? "mixed" : selected}
             readOnly
             tabIndex={-1}
             style={{ flexShrink: 0 }}
             onClick={(event) => {
                 event.stopPropagation();
-                props.setCurrentFilters({
-                    verb: "toggle",
-                    filter: { id: props.id, filter: props.filter.filter },
-                });
+                if (props.triStateCheckbox) {
+                    props.setCurrentFilters({
+                        verb: "replace",
+                        removeIds: [props.id, excludedId],
+                        filter: selected
+                            ? { id: excludedId, filter: props.filter.filter }
+                            : excluded ? undefined : { id: props.id, filter: props.filter.filter },
+                    });
+                } else {
+                    props.setCurrentFilters({
+                        verb: "toggle",
+                        filter: { id: props.id, filter: props.filter.filter },
+                    });
+                }
                 props.setSearchTracker("");
             }}
         />}
@@ -242,7 +270,7 @@ const FilterRow = React.memo(function FilterRow(props: FilterRowProps) {
 });
 
 const LabelFilterRow = React.memo(function LabelFilterRow(props: Omit<FilterRowProps, "filter" | "id"> & { label: string }) {
-    return <FilterRow {...props} id={`label-${props.label}`} showCheckbox filter={{
+    return <FilterRow {...props} id={`label-${props.label}`} showCheckbox triStateCheckbox filter={{
         name: props.label,
         filter: (t: Torrent) => t.labels.includes(props.label),
         icon: StatusIcons.Label,
@@ -462,7 +490,7 @@ function flattenTree(root: Directory): Directory[] {
     return result;
 }
 
-export const Filters = React.memo(function Filters({ torrents, currentFilters, setCurrentFilters, setSearchTracker, setCurrentTorrentId, selectedReducer }: FiltersProps) {
+export const Filters = React.memo(function Filters({ torrents, currentFilters, setCurrentFilters, setSearchTracker, setCurrentTorrentId, selectedReducer, labelFilterMode, setLabelFilterMode }: FiltersProps) {
     const config = useContext(ConfigContext);
     const serverConfig = useContext(ServerConfigContext);
     const forceRender = useForceRender();
@@ -745,12 +773,20 @@ export const Filters = React.memo(function Filters({ torrents, currentFilters, s
                         dir={d} expandedReducer={expandedReducer} {...{ torrents, currentFilters, setCurrentFilters, setSearchTracker, setCurrentTorrentId, selectedReducer }} />)}
             </div>}
             {sections[sectionsMap["用户标签"]]?.visible && <div style={{ order: sectionsMap["用户标签"] }}>
-                <Divider mx="sm" mt="md" label="用户标签" labelPosition="center" />
+                <Divider mx="sm" mt="md" label={<Flex align="center" gap="xs">
+                    <SegmentedControl
+                        size="xs"
+                        value={labelFilterMode}
+                        onChange={(value) => { setLabelFilterMode(value as LabelFilterMode); }}
+                        data={[{ label: "任一", value: "any" }, { label: "全部", value: "all" }]}
+                    />
+                    <span>用户标签</span>
+                </Flex>} labelPosition="center" />
                 <FilterRow
                     id="nolabels" filter={noLabelsFilter}
                     count={torrents.filter(noLabelsFilter.filter).length}
                     showSize={showFilterGroupSize} selectAllOnDbClk={selectFilterGroupOnDbClk}
-                    showCheckbox
+                    showCheckbox triStateCheckbox
                     currentFilters={currentFilters} setCurrentFilters={setCurrentFilters} setSearchTracker={setSearchTracker} setCurrentTorrentId={setCurrentTorrentId} selectedReducer={selectedReducer} />
                 {Object.keys(labels).sort().map((label) =>
                     <LabelFilterRow key={`labels-${label}`} label={label}

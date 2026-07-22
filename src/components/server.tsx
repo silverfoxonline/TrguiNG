@@ -24,7 +24,7 @@ import { ConfigContext, ServerConfigContext } from "../config";
 import type { ServerTorrentData, Torrent } from "../rpc/torrent";
 import { ServerRpcVersionContext, ServerSelectedTorrentsContext, ServerTorrentDataContext } from "../rpc/torrent";
 import { MemoizedDetails } from "./details";
-import type { TorrentFilter } from "./filters";
+import type { CurrentFiltersAction, LabelFilterMode, TorrentFilter } from "./filters";
 import { DefaultFilter, Filters } from "./filters";
 import { Statusbar } from "./statusbar";
 import { TorrentTable, useInitialTorrentRequiredFields } from "./tables/torrenttable";
@@ -44,9 +44,14 @@ import {bytesToHumanReadableStr} from "../trutil";
 
 function currentFiltersReducer(
     oldFilters: TorrentFilter[],
-    action: { verb: "set" | "toggle", filter: TorrentFilter },
+    action: CurrentFiltersAction,
 ) {
     if (action.verb === "set") return [action.filter];
+    if (action.verb === "replace") {
+        const newFilters = oldFilters.filter((filter) => !action.removeIds.includes(filter.id));
+        if (action.filter !== undefined) newFilters.push(action.filter);
+        return newFilters;
+    }
     const newFilters = oldFilters.filter((filter) => filter.id !== action.filter.id);
     if (newFilters.length === oldFilters.length) {
         newFilters.push(action.filter);
@@ -55,13 +60,22 @@ function currentFiltersReducer(
 }
 
 function isLabelFilter(filter: TorrentFilter) {
-    return filter.id === "nolabels" || filter.id.startsWith("label-");
+    return filter.id === "nolabels" || filter.id.startsWith("label-")
+        || filter.id === "exclude-nolabels" || filter.id.startsWith("exclude-label-");
 }
 
-function applyCurrentFilters(torrent: Torrent, currentFilters: TorrentFilter[]) {
-    const labelFilters = currentFilters.filter(isLabelFilter);
+function applyCurrentFilters(torrent: Torrent, currentFilters: TorrentFilter[], labelFilterMode: LabelFilterMode) {
+    const includedLabelFilters = currentFilters.filter((filter) =>
+        filter.id === "nolabels" || filter.id.startsWith("label-"));
+    const excludedLabelFilters = currentFilters.filter((filter) =>
+        filter.id === "exclude-nolabels" || filter.id.startsWith("exclude-label-"));
+    const includedLabelsMatch = includedLabelFilters.length === 0
+        || (labelFilterMode === "all"
+            ? includedLabelFilters.every((filter) => filter.filter(torrent))
+            : includedLabelFilters.some((filter) => filter.filter(torrent)));
     return currentFilters.find((f) => !isLabelFilter(f) && !f.filter(torrent)) === undefined
-        && (labelFilters.length === 0 || labelFilters.find((f) => f.filter(torrent)) !== undefined);
+        && includedLabelsMatch
+        && excludedLabelFilters.every((filter) => !filter.filter(torrent));
 }
 
 function useSelected() {
@@ -131,6 +145,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
     const [showTrackerSpeed, setShowTrackerSpeed] = useState<boolean>(false);
 
     const [currentFilters, setCurrentFilters] = useReducer(currentFiltersReducer, [{ id: "", filter: DefaultFilter }]);
+    const [labelFilterMode, setLabelFilterMode] = useState<LabelFilterMode>("any");
 
     const [searchTerms, setSearchTerms] = useState<string[]>([]);
     const [searchTracker, setSearchTracker] = useState<string>("");
@@ -170,7 +185,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
         if ((torrents?.findIndex((t) => t.id === currentTorrent) ?? -1) === -1) setCurrentTorrentInt(undefined);
 
         const filtered = torrents?.filter((t) => {
-            return applyCurrentFilters(t, currentFilters);
+            return applyCurrentFilters(t, currentFilters, labelFilterMode);
         }).filter(searchFilter) ?? [];
 
         const ids: string[] = filtered.map((t) => t.id);
@@ -178,7 +193,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
         selectedReducer({ verb: "filter", ids });
         setFilteredTorrents(filtered);
         setShowTrackerSpeed(currentFilters?.[0]?.id === "status-活动中");
-    }, [torrents, currentFilters, searchFilter, currentTorrent, selectedReducer, setShowTrackerSpeed]);
+    }, [torrents, currentFilters, labelFilterMode, searchFilter, currentTorrent, selectedReducer, setShowTrackerSpeed]);
 
     selectAll.current = useCallback(() => {
         const ids = filteredTorrents.map((t) => t.id) ?? [];
@@ -247,7 +262,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
     const filteredTrackers = useMemo(() => {
         const trackers: Record<string, {count: number, speed: number}> = {};
         const filtered = torrents?.filter((t) => {
-            return applyCurrentFilters(t, currentFilters);
+            return applyCurrentFilters(t, currentFilters, labelFilterMode);
         }) ?? [];
         filtered.forEach((t) => {
             if (!(t.cachedMainTracker in trackers)) trackers[t.cachedMainTracker] = {count: 0, speed: 0};
@@ -256,7 +271,7 @@ export function Server({ hostname, tabsRef }: ServerProps) {
         });
         if (!trackers[searchTracker]) setSearchTracker("");
         return trackers;
-    }, [torrents, currentFilters, searchTracker, setSearchTracker]);
+    }, [torrents, currentFilters, labelFilterMode, searchTracker, setSearchTracker]);
 
     return <ServerContext data={serverData} selected={selectedTorrents} rpc={rpcVersion}>
         <Flex direction="column" w="100%" h="100%" sx={{ position: "relative" }}>
@@ -306,6 +321,8 @@ export function Server({ hostname, tabsRef }: ServerProps) {
                                 torrents={torrents ?? []}
                                 currentFilters={currentFilters}
                                 setCurrentFilters={setCurrentFilters}
+                                labelFilterMode={labelFilterMode}
+                                setLabelFilterMode={setLabelFilterMode}
                                 setSearchTracker={setSearchTracker}
                                 setCurrentTorrentId={setCurrentTorrentInt}
                                 selectedReducer={selectedReducer} />
